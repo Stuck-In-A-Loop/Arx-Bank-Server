@@ -46,7 +46,7 @@ RUN adduser \
 
 # Give ownership of the app to the non-privileged user.
 RUN chown -R appuser:appuser /app && mkdir -p /shared && chown -R appuser:appuser /shared
-RUN pip install git+https://github.com/ageitgey/face_recognition_models
+RUN pip install git+https://github.com/ageitgey/face_recognition_models && pip install celery
 # Switch to the non-privileged user to run the application.
 # USER appuser
 

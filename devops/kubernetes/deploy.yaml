@@ -18,7 +18,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: arx-bank-server
-          image: ghcr.io/stuck-in-a-loop/arx-bank-server:latest
+          image: ghcr.io/stuck-in-a-loop/arx-bank-server:main-5c43c2c-22012025053738
           resources: {}
           ports:
             - containerPort: 8000
@@ -54,7 +54,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: arx-bank-server
-          image: ghcr.io/stuck-in-a-loop/arx-bank-server:latest
+          image: ghcr.io/stuck-in-a-loop/arx-bank-server:main-5c43c2c-22012025053738
           command:
             [
               "celery",
