@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: arx-bank
+  labels:
+    app: postgres
+spec:
+  serviceName: "postgres"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: arx-bank
+  labels:
+    app: postgres
+spec:
+  ports:
+    - port: 5432
+      name: postgres
+  selector:
+    app: postgres
+
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: postgres-secret
+  namespace: arx-bank
+spec:
+  encryptedData:
+    POSTGRES_DB: AgAyelOAEsRNQOM6rFfudsxd8XK8uvKiqw5K5AIIcTKIhjt5uWg93cNl9ihGDe1W/s/VQPKtzmg+CCNgTxUgOJeXLiemZ6RkrJ5Tzl8fAarukfop00QGZ08zdtVzL27KZw+Eq6Sm1nxHlTemtIlIf43fO4jWJl6jV+UrJA3RZsrv0Y3fyRPM09jNszjr8RdRf+vfc7Da0P/94/n2tupaiEOeeMJNpkPDgWowZpULaBPxd54Gp8ItwmPhQvJ5taaH29EsrZ+bGXbWVw/410FnFvMiv/HlUG7PRAMVZc43iRglwRZc4EW7mUtAOwoCKwmckuafV3H7zccdR9SR+1M2BeaclHDKBA/LAmEnEsLmTSaCX/pdAfA+zu90m7PyHljp2Akayei3eDAMmUuojelhC4/ghqiqVCY4LTDrchoMWzuDIKKWz4qFrqjEqEa/pf0HzVswElCYuPrZAcMIwPY74APYleXYvIrMbcYGb8ZA8HzT9iaxumbvEoLvRCSNhwU0pto0K1PadSo0+Em6C06iFmvjb0yGLbdYInZkVsiwqB+5G4OxjN/1sZeTqtzZwwZDHfpv3riexVQdozZlE6NgmgDnYl1DsRlsuEynynbkaoBOskKBAo089tQE0rqZsNffOp+gze+HE2sFBvaE4S5o8rSMgY3u2s2q8DNdZ8IFYFWSPm87XnW/19tpt0g8OD47PKEQIcFaKFtdgRdYbTO7
+    POSTGRES_PASSWORD: AgAvBGem65Kql9NNL8wdeWGzurFI6XiXAkCAKH5uUnKTmCcjizeJ5hgDTlvbIBx/+kcw9dBP1BbBmK8VXFYlwYSGPosQB2ztqrSI0Fabl0yUAd2qdhEQCtnpVpxl6gWaBYY1r2ws39M77arM+DdEQgItMAgxtbRfb7AWKFq7RRH7woz/4jeQ094vz1pzH4KZAG0cin8XlsHxExB5dDnYjCTFTHWuZ7qt4jpb6J9oQ9HR1DHw40voFLf0eJW/QWVcsaZZm+C4mz6iZ66uUBOg5atYYsykuvhnM23RWO3vnWT1xwD3OR7ntya2WyaQQDUyziHesU+kkS2tYpYso/hDv+aVIVwwL7/BdFpcOy63ukMInVfom02yESUc0SY6tQFTdL7sRoTNZu3E9aXxHt4yFkc0b7nnWL5gAP6jlxdSZyC6KXnNWI+hI1iZ4QywTBjJYFXoGX2C/N9b3fd92C1OtHrRWyNhkG9YsZBl98AGS907myRy5kGYiXjk57nz2z9RcmgjB40dEUFGc35sfrLSZyAXM5cUwsc2TuTI5gtgZjuB/o7ZHV9gX5zKIGPW4VNSarCWc5mIFM+VMqsQjNd/MtwaSfjx24XL0Gmhs3wPkGoYWbT0iyD9ZsMKXcQXiNptSwluWUTVgiipcFiXwXornlEyunvo0bVJE0dLA0GjOq2dAmKndOnqEK8NLWWckNNbGrYRkkfO54EMUXLdaZTO3QumsGMf744TlQdZJshqr/ZXlg==
+    POSTGRES_USER: AgAAW78iXdbwF5YFTjUX+3Y9HkVix0+0Jy1+V6PiKcUgm809U/IpBsnDtL2PAYjHmEaeFBZAQMw8eSYYXnlSmCCHKwDxTnMiSQocQmcPhv3Yd2rV2HuzPKcC/pabiBmJStcQll0TDTYOXqikTdu93dtewisw6KwpYmBS7XQyVpC14yrcd/734hqXfvrYm63rCmrs+ttknzLsxZNRQYw36FzYO905Mshrr/4KW95nNnjyCLV9dk4xCLd1R4UeIdG4iYOHxdu048fsjgOAAb27ZKzp54wmTrUj1L916VnrfmJu07ksbN+aLXKcT/9Oxo5uFdwevOh08HjlQ0clLL784k8+77o5VwZtqhos8fFNmKdAgZq/CPbTmR17GgzwHLzzqqeCHCq0btYyXYnE4v7hwfWk0LRZe7gnKMkhJiIJIppNaQepDrl3QV1WV+ohE93zoBawAlzLThgNSgDc5T0u3dBTBXv/855YkRQ2F+7CH6v9t2sBk0fraYDs/tSGpUWRVTWXFZiBHEvE6cGa7wCNcRYv9ECBV0YvBi5zjP/oY/g3M3VorSzUlv8yYayGjn6w4gqdgzvJlVXZW2/4YU7pm4f667TuigZNdlPziSvtpNN8s8ExPVn+BXu6svWNFWuvXFsoVF5J2rK6fqGQwB+5JA44QuXdAp7Q2/J4DV2qjofSqYmgRW0G1+vx4RdIe5ufyrV6Ivlfw1l3BQ==
+  template:
+    metadata:
+      creationTimestamp: null
+      name: postgres-secret
+      namespace: arx-bank
+    type: Opaque

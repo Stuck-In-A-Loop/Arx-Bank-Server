@@ -1,0 +1,154 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arx-bank-server-deploy
+  namespace: arx-bank
+  labels:
+    app: arx-bank-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arx-bank-server
+  template:
+    metadata:
+      labels:
+        app: arx-bank-server
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: arx-bank-server
+          image: ghcr.io/stuck-in-a-loop/arx-bank-server:latest
+          resources: {}
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - secretRef:
+                name: arx-bank-server-secret
+          volumeMounts:
+            - name: arx-bank-server-pvc
+              mountPath: /shared/image_data
+      volumes:
+        - name: arx-bank-server-pvc
+          persistentVolumeClaim:
+            claimName: arx-bank-server-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arx-bank-server-worker-deploy
+  namespace: arx-bank
+  labels:
+    app: arx-bank-server-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arx-bank-server-worker
+  template:
+    metadata:
+      labels:
+        app: arx-bank-server-worker
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: arx-bank-server
+          image: ghcr.io/stuck-in-a-loop/arx-bank-server:latest
+          command:
+            [
+              "celery",
+              "--workdir",
+              "src",
+              "-A",
+              "arx_bank_server.tasks",
+              "worker",
+              "--loglevel=debug",
+            ]
+          resources: {}
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - secretRef:
+                name: arx-bank-server-secret
+          volumeMounts:
+            - name: arx-bank-server-pvc
+              mountPath: /shared/image_data
+      volumes:
+        - name: arx-bank-server-pvc
+          persistentVolumeClaim:
+            claimName: arx-bank-server-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: arx-bank-server-pvc
+  namespace: arx-bank
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arx-bank-server-svc
+  namespace: arx-bank
+  labels:
+    app: arx-bank-server
+spec:
+  selector:
+    app: arx-bank-server
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: arx-bank-server-vs
+  namespace: istio-services
+spec:
+  hosts:
+    - arx-bank.stuckinaloop.ro
+  gateways:
+    - stuckinaloop-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: arx-bank-server-svc.arx-bank.svc.cluster.local
+            port:
+              number: 8000
+
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: arx-bank-server-secret
+  namespace: arx-bank
+spec:
+  encryptedData:
+    CELERY_DATABASE_URL: AgCIkqVNF3czGZ+NwQLLAK5N1gZSV+gRsV9f1p2YIAKbZ6Txx/0SVeOOLH4QO/aucGoO5+5hAJAcTiOwtfokzb0iV1ehBXZsEMhj3NxlEHkh+BosT43cC1a3qIAiUnAzXjXs3hbSOSA3iwrRdhxAGSuR//Bb/ZJY5kDMNvzp96HGdtwwHsTLUcj3edkKhdHTcKrP3+sY100RyTW1C/1F8/HtvfolUwoeB0TeaEYJUUs+V+dILehQDIDJnvEO+Ik6eMOEEcKDeZv20WzBZ0i9GlnZVkj1JDYGAHcc5YCvqtP7Q/o8kliGcoAdxs/NUdqSD6NzxSJZywSrvX+X2FAs8nFtB7hO9QFlGFDG1n9GMBav/UQtvhBckYjvUGDsXd1PoVwcpEjnf0LYi5cKPg90PNmQCL+garRwJBIA9bIBu3YnVfa0S5eSL61FubKZSp4zYR13cP8Qm/TpHGxtlFnEqIi+Yu2+OsDTG4QD68GP/osef9BMz22VaP03xK3RSmmAorEj7wE2QFFi+Cj2y22PtM50UbEe6LlCki6P4S1SuQyPM4Rov1EoWEWFR3mgpedx5G/XOQSEEc/3QFCNcANXWSc0vauM5e8mOrexWl01C2QZwLOy3jgdsxtD9lkm6IKcrdMBW4oq0zg99CrUAoKX05cQqtWNbwVCJwHHaGz174n/NLF3ZyBeYN5ebAv59FdScqJOwTqNb0d3PpFelQRCLKbT/DN03lW5thucIXka2rff3L5wt26It5G0qRKc1czLaEmo6jmVQyoFKDZl7y+fPUYvLGPCYbbSAXPg2JjPjCVSuw==
+    DATABASE_URL: AgAo4BY/8qJmv4oLim2tbKEfJC1ToOSlUfu8pWDiew9Q/dpM7SF7u0JyqunGo/8s6oCVz3cy6a+pMmz+4ZNCWbd3oYejVS6FQQJ8qlklwNrIT/IDpCfadfuFafn+4s02tBB8n7LhXjWwMN7xg9OGxycTSXeR/xjTPHMfNZ/MiQplqbw8g/n4calWsT9DazgfJgQgHlnh36m6bR3wjNuk/gZgMEtJ853pcQ3PiT1i16PjKyF6E6R+nfJN2XpkZ6JoHt/MhOt0D2EBmqpngDBLvUN5WqTy0aGCNCMK1Hzb5sWRw2rTeqLqiZTbGia+UIwNs4o715RvBzXLkAVgoSrSJAVf+9FliYvmuocJ/xpNlbJvF8dHq5QMcQWath/a+NS+2/3DnFoLj4Ovw6yBqlhl5sYRZpruFs7xnK1oG5blcUJ9b8u7MQELSYjb0aQqgX0Gun64nBmRifmw2RLtJEF307qcUz4+/vXtxLm2GMU6JZrdAxoSrZYQ5rl+90nYJnOHp7rV8GpF6HS1d5elsFZt32h9zFmAcMkUbPNq8XTgh0YY9yRfxC4IWzjs62YUubOBBotWZi7ulZSL527MqW3XdTLGTKLXv/uJhJQzMO+8e6FS8i6w2bbZROquR9aFJuqW+7bVuzH+/Z0F0rQmyXs4nRZpT+AB7IFHYFf/NpscD9yiTYnUP7UmYRQ/w+Zw4JyDc2Pjb9Tjm3Eujjcj9Gi9vRvKgTZGMYUlYhZW8R9MBBM0xYDooHnKllQQWg4hKKCbwuRAtbShi5hd0UUFzxYGUntMAevvBO09zwiX/v7znVHiYz2dVz7P0vEKW14=
+    PORT: AgA77Cs1dvaRhi7bcOo3IkApjQfvtRUemoykQuL5t38ZvKMQnqr3cS66Py1aj1PomJKTgJ//w1dFvjEfH2wQ6tdv4V9SmkdWBWmSfxbJlSDmak/kWlOiFLAnl2Ugf74MbjTpBZ8jaq8MJUUtft1tjrkrOT3UBZh4NkTKmMN2ju18+RD3Phj1HRvVrGXGYfejhmFUdkKT0X4H1KSOVfENPy5+hKDzACRVNFDjrvFj+1/GT1dmDTqVtxyzuBAvVsf0Rq4MzDCKAbuYe6KxOIlbSuqmHOPPtLsig7/qeAdktLA067l2THIpCMnVrwepZQ3GaIgGr5BnbQC66PSWmyITLS5oLP6YK/aIXkyRIDLUw2sfdGyfdKu3I7rl03nxkY3hfERCN1FUCLx3x7/9woy7B3/GsHu1D7zNNZPE4F8zDRIsykES7EXhXmu6FswhTvYOaBS3NhKk7qPsQ14f+FyAYKbMgWfq1nJfwEaTq6UxtJN8IChkao0/pNMm6rlvAgWt/MDuEjsy4KnKlb5/SIC66PctwLbRnc6iC6H5WZkgPmgZ8t5pTUl3dcOIQSVqyhTJ+dc+aVAP9kaD7cbCJne5CGAGsxfRSolLzFzVW+iulRgYbxN4LbcJo5GKdtdwkEkuENQcpe8wVmz8YOjhs4oOOI7RWJuJHeN1ZDLt9xKWqEAUzba4UMb9rMXzI6GNWCf/heA2NFx4
+    REDIS_URL: AgAPWM0nP7NcystZMeb6Y7tkA5v9iGMxoP/Z8Zm34R0j7qxtiE8I9J5VqfDqHobZdrynlGh5/eEXXbYO1QiAWSy5Wpxvt2suuzR0KVSTR28Vyv6qvqVfXcLG2tzIMl4mKA5nOKXwnqAAJ/lEXjChGK/LT7ONwnNtw/av8YQQakE3aI2Yv2ZNznxFfIe7O2x74padPVlsp5BJYz2ANyqPbfHIPxZR4exlBf3Nt6F9b3OUP3uTqJg1JT+0x3+lyZI21Nie3n0M6rkiQU+pgQbaloXmdQir3DtCgVHqUA50prT0moF/+vzzpyBf8YDFhwS6NhGk5mo7KYCLaZyvFWecaYOt4YS2MxmccjGdMhqSLO99KBXlmnkwpdfXkLu8EMgVEoQlDJQxs6K6vyXzwaDkdQOvJ2J5ZYIwKZ/y0/ieKFnYkixdc3IqG+HlZYOjADkiKmeIMj7GsrvHyGTnzbj0RdyYtWvu5U9WewTylcoDnxEc7vOrBBxrPCznmLo/GsRk1b/6npOJBPDveHyPWXnlkdn56iyZE1p0QJUXm6iaCH55hboIkATiIc9DRZFmB1R1iKMA1MNVGD9Z2fu3x9lSkZ4oKFx1xlXUwSbP4iTJY5GbaRocG1tx1r5B8PrJ+qCKSUe+0TDS+iPZc6lZL3YT6NgRRGuZxHK9NebmqX9lUzz/QwUI1/KCII3x6h1lQrrLxDXdacMnLVm6uv5uTaewnSWjbdiC9A==
+    SMTP_PASSWORD: AgBuQyMD6WB11cpJw2XZe0dwjQ+pJiRVth8zMOIfGri9+Ec/BV4rt5p8YwyJRoL8uIuy3tPk328283lSXMBOSN1VSWmYNqtBNuRNvceeKlv8kYe9WxQu3Z1qI980oarRxQCC8MLPndGeSA0ynWE/HtdX3TTuO8WplFAJx51Jm8IicMYOgxRxTor/LollHNchVXozITS5BoM1IuNGm7RnGS4mGzvnhFwOiWdrZmsgHn7EuRi+GrCD3J909ujvVYJRLGiVYD53/tfIVmBO4wIvIL42K3sp0seHqFRA5JFZA0J8f8BFomwaNQ1i2awKsCyxDKka5SstEp3kbmsWHmgJUZ5MsMxx2nAuQRMjmx6KOQYbXXyPFahreL9w05AAh8l6KtjbFB60ju+JFWMTWuc+CUVHmEztOdiqScAl+wMLxED1qS4dpkwVBoUKTB8XN52RYOZYBqfnLXvXqvXFdMOhWZgsE6T6sl5YUCRNzFcxv0V/XLyqaWrHrEpg+c7hgXTTC0kmT449GOj56pMNdRCb/afhxitPkXvZjRZCMtOZ3IG0nR/zhDvQw8Ry2z/n5wqiZOYX++Fvj1a70188yTyuUUZaeKswILlezme7yGBpVNSib2P+aIwnlrnewx3uOsOo+BM8A0Ee45TDBArkbvkq0c1XFxE13ddTvS08nnFllemAZHodDgUS1mA26s/glhLkqd0F1FktEl0QzzXinz6jV+uhtO+ZKFPDxQWFJZ+YZQkoSg==
+    SMTP_PORT: AgAAgtUcWMGuP1R5TnKGFDeesaRKT35p7Ly8yzDi74yHpvr8phiGDLjImYI58hO7QLBEolL01BNNmEYJ1QmW3aqxw+SAC+iYb5Xm+5jZHW94GTt1J/mPh2e9lIo4O817bh+9lT4CCdrRuaCUouPSZWKIvu8SiyDLZ8iBMVWES/Q8pbFRYZQIVjkQ8qWRD2E1RCxJocQYMS7dumS/vQHSdiPEsatL06MQ5FT127a+vpUF00gmw6wjR5pF2MnDc+GQR1Zr7d+UPpQp4C5jYEzMjQrH+SCc4Yr8kIIoypdFm95nPD5GTV5ydJFuScU7usAaD3gucsZuAbUalyKVBhmOhz0ODxXENgVlUadMRWsbHHNI/ePaGrURGSTKgEt5D1Ut6MDsrBFo5n23gzm8su7u4YKzT9TYTtW8flEifgZ6RmrrP1l808inDz7zgRh2f88kmSbM66XMqTCX5CLatnLrrDBvN2XAhF46ccZf9Kabv5lUnzdnkrGCoQ4mj8cPkibGuEVaVfunPQE6TZR6sk3NuVNOV6J27kOkQoXDVPI9PpK2lr3dSqa2v4g2t6EgVSXVUWMwKXVzmr9k205UVY2WilUv5ghJx43JE3Lqaqt60tSSLyPd7UvQ9ySfzlIixqf24fu6PIERCjdoc+axC2CJK4Pn/2EEjlVX29lIsz16jVmtQB92MUjBErV7umGd9YR+Ec2tW6c=
+    SMTP_SERVER: AgAP6CD5fAjneqEEkZ/GPdtJKRY3/cEYzqPNxETh+uMLqkMP+vRoCjOaSlvF33G9lUYk+oGpdpV5ZBCSFTiOXcG2mKKhdmBBnlYy1QkWDDvm9tLJGbH/2CGPHMwXNyCwHX/6vCMfJUGC+r2p8Gn8h7RxXjlVtLMrX/xGp97yD0cWO/cdvHmhuglCyRejZnwFXhepwtCyqfL3SB8vNSltZsGqy9yTBQSB3Hdh32iioAbwLihA1jUg1AtgT4KwYIIVxDFUjq1X2ojkG3C1do1oJZiLpx0A2ompvl7M3tzMvPniOgCM8YyvUWQLSBo9p7SBdayuNllI23amcLwU8OKqsCI0lzI6etm1p56h/2nLcXBZsqCEXqpz2H/3nNSotUKZJwkWf4WoMl2o9MkEDktOG9f4ZDKJLMHaQ8cPh7e06mF/8lriwZpfECn3i3bSjOayzCm1ndemZ5dKnrJsTvAWD+mBcicAsLyagRr6w70F92QXs30fGgzbenvlG9TKuAcFuhymMzjl68G7+NzCJGhTnzZAJMhEGrVyBZ+QTv6Bk9I7AWi0HKwM+f3WzQ/nqvcXOWCKmrSt/V1hXia8p3YNK0Oc2ZaUHJ4DjTMXT0zlaRZPPn6exdG7r5aud055eTuPp9XV3bz898cOAzIKDGqb7hKV1E9FPkij8HzCddkRPvUOkocz71WpZpG6FW51F5fFavr/d2+7ekbp8RmHFAo41Q==
+    SMTP_USER: AgBKvhWsOKosLQrvAaSM4NmsrLOlqYnhLQne4abzXgeJXoiDwvumI4xwB7/JpKDmN3msMNmusQu9S4cgVFu3ZdtnBn5rdX90f5wk9KAblJwhOd8LTYDxmHQ8Lxblji962b4SNdBpgQ1UFvYf2NzrKbbFuD7o29UE8Y7JFppjKBnXfnq/6PF+vFk5AHCLuqP1eGBhsZhQFzLdWN1+KocGQqprhsXnvzfGQbLUfJruSXpXTZixjGEmTAjHnDfz5IJKAp5qhBdNF66pSjDtdujck3NAeFTqteb/qKVgQpHV2SILjcGb2YP4/CElF9l/CkNKSWv4u7QJSteSOiXbWmRi316M+oJPyZGmkFu262Wt7Y3JZ5ZT3py9EZwB0er60PZpJd7voAgebE1+NIPOp+saKeckUIsy0/VIMpL1MxApHl4x66Dx4N9Zz7hDdEpNQpMDqLGSAFr/xxjU/TJU5dRNQic0gmweqAiSuuz7K6UccprmUdPaTNWcmVfESreVjboZgPWLt+t4EbAkqOJxGWqFDL3T6KMB6mErepCBhmqGQQm+oGHVskzK688g2RaF+l6fLFei4Yb+wl+KwJRBm67s5aAOIF/v7vAev4f6WtXCJWKfYUPhogD8RkgWQ+D3rrj1fy/gdVquR5StVGIFVQJA9Pew7lIbNEx1913KPl9XCYPTVYDDc77GhH4HjbxfJJcGoBQfJ0+de27lYcdgt2vp9lqqX68=
+  template:
+    metadata:
+      creationTimestamp: null
+      name: arx-bank-server-secret
+      namespace: arx-bank
+    type: Opaque

@@ -1,0 +1,124 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  COMPONENT: "arx-bank-server"
+
+jobs:
+  build-docker-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract branch name
+        shell: bash
+        run: echo "BRANCH_NAME=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_ENV
+
+      - name: Nomalize branch name
+        id: branch
+        run: echo "BRANCH_NAME=$(echo ${{ env.BRANCH_NAME }} | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Create date tag for image
+        id: date
+        run: echo "DATE_TAG=$(date +'%d%m%Y%H%M%S')" >> $GITHUB_ENV
+
+      - name: Create alternate sha tag for image
+        id: gittag
+        run: echo "SHA_TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            ${{ env.BRANCH_NAME }}
+            ${{ env.DATE_TAG }}
+            ${{ env.SHA_TAG }}
+            ${{ env.BRANCH_NAME }}-${{ env.SHA_TAG }}-${{ env.DATE_TAG }}
+            "latest"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        id: push
+        with:
+          file: Dockerfile
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v2
+        id: attest
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Prepare tags from env for artifact upload
+        run: |-
+          echo -e "TAG_BRANCH=${{ env.BRANCH_NAME }}-latest\nTAG_FULL=$(echo ${{ env.BRANCH_NAME }}-${{ env.SHA_TAG }}-${{ env.DATE_TAG }})" >> tags.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-tags
+          path: tags.txt
+          retention-days: 1
+
+  # deploy-main:
+  #   if: ${{ github.ref == 'refs/heads/main' }}
+  #   runs-on: sial-runner
+  #   needs: [build-docker-image]
+  #   permissions:
+  #     contents: read
+  #     packages: write
+
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Download artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: image-tags
+
+  #     - name: Read artifact
+  #       id: read_artifact
+  #       run: |
+  #         echo "$(cat tags.txt)" >> $GITHUB_ENV
+
+  #     - name: Run deploy.sh
+  #       env:
+  #         NAMESPACES: ${{ vars.NAMESPACES }}
+  #         TAG: ${{ env.TAG_FULL }}
+  #         CI_PROJECT_NAME: ${{ github.repository }}
+  #         CI_COMMIT_SHA: ${{ github.sha }}
+  #       run: |
+  #         chmod +x devops/deploy.sh
+  #         ./devops/deploy.sh

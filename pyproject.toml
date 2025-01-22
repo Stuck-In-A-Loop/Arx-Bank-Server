@@ -1,0 +1,70 @@
+[project]
+name = "arx-bank-server"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    { name = "Cristian Iordachescu", email = "cristian.iordachescu@ivfuture.uk" },
+]
+dependencies = [
+    "numpy>=2.2.2",
+    "opencv-python>=4.11.0.86",
+    "face-recognition>=1.3.0",
+    "fastapi[standard]>=0.115.6",
+    "sqlalchemy[asyncio]>=2.0.37",
+    "sqlmodel>=0.0.22",
+    "pydantic-settings>=2.7.1",
+    "scipy>=1.15.1",
+    "python-multipart>=0.0.20",
+    "aiosmtplib>=3.0.2",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.1",
+    "celery[redis]>=5.4.0",
+]
+requires-python = ">=3.13"
+readme = "README.md"
+license = { text = "MIT" }
+
+
+[tool.pdm]
+distribution = true
+[tool.pdm.scripts]
+formatisort = "isort ."
+formatblack = "black ."
+format = { composite = ["formatisort", "formatblack"] }
+dev.cmd = "fastapi dev src/arx_bank_server/__main__.py --port 8000 --host 0.0.0.0"
+dev.env_file.override = ".env"
+prod = { shell = "fastapi run src/arx_bank_server/__main__.py --host 0.0.0.0 --port $PORT" }
+produp = { composite = ["alup", "prod"] }
+alrev = "alembic revision --autogenerate -m"
+alup = "alembic upgrade head"
+aldown = "alembic downgrade -1"
+dbup = "docker compose up db adminer redis -d"
+dbdown = "docker compose down db adminer redis"
+dbclean = "docker compose down db adminer redis -v"
+
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14.1",
+    "black>=24.10.0",
+    "isort>=5.13.2",
+    "pylint[spelling]>=3.3.3",
+    "setuptools>=75.8.0",
+]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+skip_glob = ["**/__init__.py"]
+# extend_skip = ["src/ping_guardian/db/base.py"]
+py_version = 313
