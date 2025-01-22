@@ -55,16 +55,7 @@ spec:
       containers:
         - name: arx-bank-server
           image: ghcr.io/stuck-in-a-loop/arx-bank-server:main-5c43c2c-22012025053738
-          command:
-            [
-              "celery",
-              "--workdir",
-              "src",
-              "-A",
-              "arx_bank_server.tasks",
-              "worker",
-              "--loglevel=debug",
-            ]
+          command: ["pdm", "celery"]
           resources: {}
           ports:
             - containerPort: 8000

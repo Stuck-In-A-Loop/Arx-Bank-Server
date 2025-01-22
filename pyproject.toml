@@ -41,6 +41,7 @@ aldown = "alembic downgrade -1"
 dbup = "docker compose up db adminer redis -d"
 dbdown = "docker compose down db adminer redis"
 dbclean = "docker compose down db adminer redis -v"
+celery = "celery -A arx_bank_server.tasks worker --loglevel=info"
 
 
 [build-system]
